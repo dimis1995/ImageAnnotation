@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import shutil
+import json
 
 class ImageLabelingTool:
     def __init__(self, root):
@@ -121,12 +122,39 @@ class ImageLabelingTool:
                 self.canvas.delete(self.rect)
 
     def next_image(self):
+        # Save annotations for the current image before moving to the next one
+        if self.annotations:
+            self.save_annotations()
+
+        # Move to the next image
         self.image_index += 1
         if self.image_index >= len(self.image_list):
-            messagebox.showinfo("Info", "No more images in the folder!")
+            messagebox.showinfo("Info", "No more images in the folder and subfolders!")
             self.next_button.config(state=tk.DISABLED)
         else:
             self.display_image()
+
+    def save_annotations(self):
+        image_path = self.image_list[self.image_index]
+        output_folder = filedialog.askdirectory(title="Select Output Folder")  # Ensure this is done once outside this method
+
+        # Ensure the output folder exists
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
+        # Define the output paths for the image and the annotation file
+        base_name = os.path.basename(image_path)
+        image_output_path = os.path.join(output_folder, base_name)
+        annotation_output_path = os.path.join(output_folder, f"{os.path.splitext(base_name)[0]}.json")
+
+        # Copy the image to the output folder
+        shutil.copy(image_path, image_output_path)
+
+        # Save annotations as a JSON file
+        with open(annotation_output_path, 'w') as f:
+            json.dump(self.annotations, f, indent=4)
+
+        print(f"Annotations saved for {base_name}")
 
 # Main application loop
 if __name__ == "__main__":
