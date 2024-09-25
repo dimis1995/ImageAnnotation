@@ -1,7 +1,8 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk # type: ignore
+from tkinter import filedialog, messagebox, simpledialog
+from PIL import Image, ImageTk
+import shutil
 
 class ImageLabelingTool:
     def __init__(self, root):
@@ -12,7 +13,13 @@ class ImageLabelingTool:
         self.image_index = 0
         self.image_list = []
         self.folder_path = ""
-
+        self.image = None
+        self.photo = None
+        self.rect = None  # For bounding box
+        self.start_x = None
+        self.start_y = None
+        self.annotations = []  # To store bounding boxes and labels
+        self.rectangles = []  # To store the created rectangles
         # Set up UI elements
         self.setup_ui()
 
@@ -25,9 +32,18 @@ class ImageLabelingTool:
         self.canvas = tk.Canvas(self.root, width=600, height=400)
         self.canvas.pack()
 
+        # Bind mouse events for drawing
+        self.canvas.bind("<ButtonPress-1>", self.on_button_press)
+        self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+
         # Next button
         self.next_button = tk.Button(self.root, text="Next Image", command=self.next_image, state=tk.DISABLED)
         self.next_button.pack(pady=10)
+
+        # Clear button
+        self.clear_button = tk.Button(self.root, text="Clear Annotations", command=self.clear_annotations, state=tk.DISABLED)
+        self.clear_button.pack(pady=10)
 
     def browse_folder(self):
         self.folder_path = filedialog.askdirectory()
@@ -48,14 +64,61 @@ class ImageLabelingTool:
             
             self.display_image()
             self.next_button.config(state=tk.NORMAL)
+            self.clear_button.config(state=tk.NORMAL)
 
     def display_image(self):
-        image_path = os.path.join(self.folder_path, self.image_list[self.image_index])
-        image = Image.open(image_path)
-        image = image.resize((600, 400))
-        self.photo = ImageTk.PhotoImage(image)
+        self.clear_annotations()
+        image_path = self.image_list[self.image_index]
+        self.image = Image.open(image_path)
+        self.image = self.image.resize((600, 400), Image.Resampling.LANCZOS)
+        self.photo = ImageTk.PhotoImage(self.image)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
-        self.root.title(f"Image Labeling Tool - {self.image_list[self.image_index]}")
+        self.root.title(f"Image Labeling Tool - {os.path.basename(image_path)}")
+        self.annotations.clear()  # Clear previous annotations
+
+
+    def on_button_press(self, event):
+        # Save the starting coordinates of the bounding box
+        self.start_x = event.x
+        self.start_y = event.y
+        # Create a rectangle, but don't display it yet
+        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline='red')
+
+    def on_mouse_drag(self, event):
+        # Update the rectangle as the mouse is dragged
+        cur_x, cur_y = (event.x, event.y)
+        if self.rect and self.start_x and self.start_y:
+            self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+
+    def clear_annotations(self):
+        # Clear all the rectangles from the canvas
+        if len(self.rectangles) > 0:
+            for rect in self.rectangles:
+                self.canvas.delete(rect)
+            self.rectangles.clear()
+            self.annotations.clear()  # Clear all stored annotations
+
+    def on_button_release(self, event):
+        # Finalize the bounding box and ask for the class label
+        end_x, end_y = (event.x, event.y)
+        # Ask user for class label
+        label = simpledialog.askstring("Input", "Enter class label:")
+        if label:
+            # Save annotation (bounding box coordinates and label)
+            self.annotations.append({
+                'x1': self.start_x,
+                'y1': self.start_y,
+                'x2': end_x,
+                'y2': end_y,
+                'label': label
+            })
+            print(f"Annotation: {self.annotations[-1]}")  # For now, just print it
+            # Add the rectangle to the list of rectangles
+            self.rectangles.append(self.rect)
+
+        else:
+            if self.rect:
+                self.canvas.delete(self.rect)
 
     def next_image(self):
         self.image_index += 1
