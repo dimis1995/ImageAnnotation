@@ -4,11 +4,18 @@ from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import shutil
 import json
+from tinydb import TinyDB, Query
+import uuid
 
 class ImageLabelingTool:
     def __init__(self, root):
         self.root = root
         self.root.title("Image Labeling Tool")
+
+        # DB setup
+        self.db = TinyDB('annotations_db.json')
+        self.annotations_table = self.db.table('annotations')
+        self.progress_table = self.db.table('progress')
 
         # Variables
         self.image_index = 0
@@ -166,51 +173,35 @@ class ImageLabelingTool:
         if not self.output_folder:
             self.output_folder = filedialog.askdirectory(title="Select Output Folder")  # Ensure this is done once outside this method
 
-        # Ensure the output folder exists
-        if not os.path.exists(self.output_folder):
-            os.makedirs(self.output_folder)
+        image_uuid = str(uuid.uuid4())
+        image_extension = os.path.splitext(image_path)[1]
+        new_image_name = f"{image_uuid}{image_extension}"
 
         # Define the output paths for the image and the annotation file
-        base_name = os.path.basename(image_path)
-        image_output_path = os.path.join(self.output_folder, base_name)
-        annotation_output_path = os.path.join(self.output_folder, f"{os.path.splitext(base_name)[0]}.json")
+        image_output_path = os.path.join(self.output_folder, new_image_name)
 
         # Copy the image to the output folder
         shutil.copy(image_path, image_output_path)
 
         # Save annotations as a JSON file
-        with open(annotation_output_path, 'w') as f:
-            json.dump(self.annotations, f, indent=4)
+        self.annotations_table.insert({'image_file': new_image_name, 'annotations': self.annotations})
 
-        print(f"Annotations saved for {base_name}")
+        print(f"Annotations saved for {self.image_list[self.image_index]} to {new_image_name}")
 
     def load_progress(self):
         # Load progress from a progress file (if it exists)
-        progress_file = 'progress.json'
-        if os.path.exists(progress_file):
-            with open(progress_file, 'r') as f:
-                progress = json.load(f)
-                if self.folder_path in progress:
-                    self.image_index = progress[self.folder_path]
+        progress = self.progress_table.get(Query().folder == self.folder_path)
+        if progress and type(progress) == dict:
+            self.image_index = progress.get('image_index', 0)
         else:
             self.image_index = 0
 
     def save_progress(self):
-        # Save the current image index for the folder to the progress file
-        progress_file = 'progress.json'
-        progress = {}
-
-        # Load existing progress if available
-        if os.path.exists(progress_file):
-            with open(progress_file, 'r') as f:
-                progress = json.load(f)
-
-        # Update the progress for the current folder
-        progress[self.folder_path] = self.image_index
-
-        # Write the progress back to the file
-        with open(progress_file, 'w') as f:
-            json.dump(progress, f, indent=4)
+        # Upsert (insert or update) the progress for the current folder
+        self.progress_table.upsert({
+            'folder': self.folder_path,
+            'image_index': self.image_index
+        }, Query().folder == self.folder_path)
 
         print(f"Progress saved for folder: {self.folder_path}, image index: {self.image_index}")
 
@@ -218,6 +209,19 @@ class ImageLabelingTool:
 
     def show_statistics(self):
         import matplotlib.pyplot as plt
+
+        # Query TinyDB for all annotations
+        all_annotations = self.annotations_table.all()
+
+        # Reset class_stats and populate from database
+        self.class_stats = {}
+        for entry in all_annotations:
+            for annotation in entry['annotations']:
+                label = annotation['label']
+                if label in self.class_stats:
+                    self.class_stats[label] += 1
+                else:
+                    self.class_stats[label] = 1
 
         if not self.class_stats:
             messagebox.showinfo("Info", "No annotations available to display statistics.")
