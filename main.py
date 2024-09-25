@@ -21,6 +21,10 @@ class ImageLabelingTool:
         self.start_y = None
         self.annotations = []  # To store bounding boxes and labels
         self.rectangles = []  # To store the created rectangles
+
+
+        # Class statistics
+        self.class_stats = {}  # Dictionary to store the count of annotations for each class
         # Set up UI elements
         self.setup_ui()
 
@@ -46,23 +50,36 @@ class ImageLabelingTool:
         self.clear_button = tk.Button(self.root, text="Clear Annotations", command=self.clear_annotations, state=tk.DISABLED)
         self.clear_button.pack(pady=10)
 
+        # Show Statistics Button
+        self.stats_button = tk.Button(self.root, text="Show Statistics", command=self.show_statistics)
+        self.stats_button.pack(pady=10)
+
     def browse_folder(self):
-        self.folder_path = filedialog.askdirectory()
+        self.folder_path = filedialog.askdirectory(title="Select Input Folder")
         if self.folder_path:
+            # Prompt for output directory only once
+            self.output_folder = filedialog.askdirectory(title="Select Output Folder")
+            if not self.output_folder:
+                messagebox.showerror("Error", "No output folder selected!")
+                return
+
             # Clear previous image list and index
             self.image_list = []
             self.image_index = 0
-            
+                
             # Traverse the folder and subfolders to collect image files
             for root_dir, dirs, files in os.walk(self.folder_path):
                 for file in files:
-                    if file.lower().endswith(('bmp')):
+                    if file.lower().endswith('bmp'):
                         self.image_list.append(os.path.join(root_dir, file))
             
             if not self.image_list:
                 messagebox.showerror("Error", "No images found in the selected folder and its subfolders!")
                 return
             
+            # Load the saved progress for the folder
+            self.load_progress()
+
             self.display_image()
             self.next_button.config(state=tk.NORMAL)
             self.clear_button.config(state=tk.NORMAL)
@@ -117,6 +134,13 @@ class ImageLabelingTool:
             # Add the rectangle to the list of rectangles
             self.rectangles.append(self.rect)
 
+
+            # Update the class statistics
+            if label in self.class_stats:
+                self.class_stats[label] += 1
+            else:
+                self.class_stats[label] = 1
+
         else:
             if self.rect:
                 self.canvas.delete(self.rect)
@@ -125,6 +149,9 @@ class ImageLabelingTool:
         # Save annotations for the current image before moving to the next one
         if self.annotations:
             self.save_annotations()
+
+        # Save progress before moving to the next image
+        self.save_progress()
 
         # Move to the next image
         self.image_index += 1
@@ -136,16 +163,17 @@ class ImageLabelingTool:
 
     def save_annotations(self):
         image_path = self.image_list[self.image_index]
-        output_folder = filedialog.askdirectory(title="Select Output Folder")  # Ensure this is done once outside this method
+        if not self.output_folder:
+            self.output_folder = filedialog.askdirectory(title="Select Output Folder")  # Ensure this is done once outside this method
 
         # Ensure the output folder exists
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
+        if not os.path.exists(self.output_folder):
+            os.makedirs(self.output_folder)
 
         # Define the output paths for the image and the annotation file
         base_name = os.path.basename(image_path)
-        image_output_path = os.path.join(output_folder, base_name)
-        annotation_output_path = os.path.join(output_folder, f"{os.path.splitext(base_name)[0]}.json")
+        image_output_path = os.path.join(self.output_folder, base_name)
+        annotation_output_path = os.path.join(self.output_folder, f"{os.path.splitext(base_name)[0]}.json")
 
         # Copy the image to the output folder
         shutil.copy(image_path, image_output_path)
@@ -155,6 +183,57 @@ class ImageLabelingTool:
             json.dump(self.annotations, f, indent=4)
 
         print(f"Annotations saved for {base_name}")
+
+    def load_progress(self):
+        # Load progress from a progress file (if it exists)
+        progress_file = 'progress.json'
+        if os.path.exists(progress_file):
+            with open(progress_file, 'r') as f:
+                progress = json.load(f)
+                if self.folder_path in progress:
+                    self.image_index = progress[self.folder_path]
+        else:
+            self.image_index = 0
+
+    def save_progress(self):
+        # Save the current image index for the folder to the progress file
+        progress_file = 'progress.json'
+        progress = {}
+
+        # Load existing progress if available
+        if os.path.exists(progress_file):
+            with open(progress_file, 'r') as f:
+                progress = json.load(f)
+
+        # Update the progress for the current folder
+        progress[self.folder_path] = self.image_index
+
+        # Write the progress back to the file
+        with open(progress_file, 'w') as f:
+            json.dump(progress, f, indent=4)
+
+        print(f"Progress saved for folder: {self.folder_path}, image index: {self.image_index}")
+
+
+
+    def show_statistics(self):
+        import matplotlib.pyplot as plt
+
+        if not self.class_stats:
+            messagebox.showinfo("Info", "No annotations available to display statistics.")
+            return
+
+        classes = list(self.class_stats.keys())
+        counts = list(self.class_stats.values())
+
+        plt.figure(figsize=(8, 6))
+        plt.bar(classes, counts, color='skyblue')
+        plt.xlabel("Classes")
+        plt.ylabel("Number of Annotations")
+        plt.title("Class Distribution")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
 
 # Main application loop
 if __name__ == "__main__":
