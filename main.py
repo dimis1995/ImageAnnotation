@@ -3,7 +3,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import shutil
-import json
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 from tinydb import TinyDB, Query
 import uuid
 
@@ -57,9 +58,16 @@ class ImageLabelingTool:
         self.clear_button = tk.Button(self.root, text="Clear Annotations", command=self.clear_annotations, state=tk.DISABLED)
         self.clear_button.pack(pady=10)
 
-        # Show Statistics Button
-        self.stats_button = tk.Button(self.root, text="Show Statistics", command=self.show_statistics)
-        self.stats_button.pack(pady=10)
+        # # Show Statistics Button
+        # self.stats_button = tk.Button(self.root, text="Show Statistics", command=self.show_statistics)
+        # self.stats_button.pack(pady=10)
+
+        # Create a frame for the statistics
+        self.stats_frame = tk.Frame(self.root)
+        self.stats_frame.pack(side=tk.RIGHT, padx=20)
+
+        # Create an initial plot for class distribution
+        self.create_statistics_plot()
 
     def browse_folder(self):
         self.folder_path = filedialog.askdirectory(title="Select Input Folder")
@@ -117,11 +125,13 @@ class ImageLabelingTool:
 
     def clear_annotations(self):
         # Clear all the rectangles from the canvas
-        if len(self.rectangles) > 0:
-            for rect in self.rectangles:
-                self.canvas.delete(rect)
-            self.rectangles.clear()
-            self.annotations.clear()  # Clear all stored annotations
+        for rect in self.rectangles:
+            self.canvas.delete(rect)
+        self.rectangles.clear()
+        self.annotations.clear()  # Clear all stored annotations
+
+        # Update the statistics plot
+        self.update_statistics_plot()
 
     def on_button_release(self, event):
         # Finalize the bounding box and ask for the class label
@@ -170,23 +180,28 @@ class ImageLabelingTool:
 
     def save_annotations(self):
         image_path = self.image_list[self.image_index]
-        if not self.output_folder:
-            self.output_folder = filedialog.askdirectory(title="Select Output Folder")  # Ensure this is done once outside this method
 
+        # Generate a UUID for the image filename to prevent overwriting
         image_uuid = str(uuid.uuid4())
         image_extension = os.path.splitext(image_path)[1]
         new_image_name = f"{image_uuid}{image_extension}"
 
-        # Define the output paths for the image and the annotation file
+        # Define the output path for the image
         image_output_path = os.path.join(self.output_folder, new_image_name)
 
-        # Copy the image to the output folder
+        # Copy the image to the output folder with the new name
         shutil.copy(image_path, image_output_path)
 
-        # Save annotations as a JSON file
-        self.annotations_table.insert({'image_file': new_image_name, 'annotations': self.annotations})
+        # Save annotations in TinyDB
+        self.annotations_table.insert({
+            'image_file': new_image_name,
+            'annotations': self.annotations
+        })
 
-        print(f"Annotations saved for {self.image_list[self.image_index]} to {new_image_name}")
+        # Update statistics plot
+        self.update_statistics_plot()
+
+        print(f"Annotations saved for {new_image_name}")
 
     def load_progress(self):
         # Load progress from a progress file (if it exists)
@@ -207,8 +222,51 @@ class ImageLabelingTool:
 
 
 
-    def show_statistics(self):
-        import matplotlib.pyplot as plt
+    # def show_statistics(self):
+
+    #     # Query TinyDB for all annotations
+    #     all_annotations = self.annotations_table.all()
+
+    #     # Reset class_stats and populate from database
+    #     self.class_stats = {}
+    #     for entry in all_annotations:
+    #         for annotation in entry['annotations']:
+    #             label = annotation['label']
+    #             if label in self.class_stats:
+    #                 self.class_stats[label] += 1
+    #             else:
+    #                 self.class_stats[label] = 1
+
+    #     if not self.class_stats:
+    #         messagebox.showinfo("Info", "No annotations available to display statistics.")
+    #         return
+
+    #     classes = list(self.class_stats.keys())
+    #     counts = list(self.class_stats.values())
+
+    #     plt.figure(figsize=(8, 6))
+    #     plt.bar(classes, counts, color='skyblue')
+    #     plt.xlabel("Classes")
+    #     plt.ylabel("Number of Annotations")
+    #     plt.title("Class Distribution")
+    #     plt.xticks(rotation=45)
+    #     plt.tight_layout()
+    #     plt.show()
+
+    def create_statistics_plot(self):
+        # Create a Matplotlib figure
+        self.fig, self.ax = plt.subplots(figsize=(4, 3))
+
+        # Initial empty plot
+        self.ax.bar([], [])
+
+        # Embed the figure in Tkinter (using stats_canvas to avoid name conflict)
+        self.stats_canvas = FigureCanvasTkAgg(self.fig, master=self.stats_frame)
+        self.stats_canvas.get_tk_widget().pack()
+
+    def update_statistics_plot(self):
+        # Clear the previous plot
+        self.ax.clear()
 
         # Query TinyDB for all annotations
         all_annotations = self.annotations_table.all()
@@ -223,21 +281,18 @@ class ImageLabelingTool:
                 else:
                     self.class_stats[label] = 1
 
-        if not self.class_stats:
-            messagebox.showinfo("Info", "No annotations available to display statistics.")
-            return
-
+        # Update the plot with the new data
         classes = list(self.class_stats.keys())
         counts = list(self.class_stats.values())
 
-        plt.figure(figsize=(8, 6))
-        plt.bar(classes, counts, color='skyblue')
-        plt.xlabel("Classes")
-        plt.ylabel("Number of Annotations")
-        plt.title("Class Distribution")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
+        self.ax.bar(classes, counts, color='skyblue')
+        self.ax.set_xlabel("Classes")
+        self.ax.set_ylabel("Number of Annotations")
+        self.ax.set_title("Class Distribution")
+        self.ax.tick_params(axis='x', rotation=45)
+
+        # Refresh the stats canvas
+        self.stats_canvas.draw()
 
 # Main application loop
 if __name__ == "__main__":

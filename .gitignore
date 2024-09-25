@@ -2,4 +2,4 @@ env/*
 output/*
 *.bmp
 
-progress.json
+annotations_db.json
