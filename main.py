@@ -10,6 +10,18 @@ import uuid
 
 class ImageLabelingTool:
     def __init__(self, root):
+        """
+        Initializes the ImageLabelingTool class.
+
+        Sets up the root window, database connections, and initializes variables.
+        Calls the setup_ui method to configure the user interface.
+
+        Args:
+            root: The root window of the application.
+
+        Returns:
+            None
+        """
         self.root = root
         self.root.title("Image Labeling Tool")
 
@@ -34,6 +46,20 @@ class ImageLabelingTool:
         self.setup_ui()
 
     def setup_ui(self):
+        """
+        Sets up the user interface for the ImageLabelingTool class.
+
+        Creates and configures the necessary UI elements such as the browse button, canvas,
+        next image button, clear annotations button, and statistics frame. Binds mouse events
+        for drawing on the canvas. Calls the create_statistics_plot method to create an initial
+        plot for class distribution.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         # Browse button
         self.browse_button = tk.Button(self.root, text="Browse Folder", command=self.browse_folder)
         self.browse_button.pack(pady=10)
@@ -63,6 +89,17 @@ class ImageLabelingTool:
         self.create_statistics_plot()
 
     def browse_folder(self):
+        """
+        Browses for a folder containing images and sets up the image list for labeling.
+        
+        Prompts the user to select an input folder and an output folder. It then walks through the input folder and its subfolders to find all BMP images. If no images are found, an error message is displayed. Otherwise, it loads the progress, displays the first image, and enables the next image and clear annotations buttons.
+        
+        Parameters:
+            None
+        
+        Returns:
+            None
+        """
         self.folder_path = filedialog.askdirectory(title="Select Input Folder")
         if self.folder_path:
             self.output_folder = filedialog.askdirectory(title="Select Output Folder")
@@ -89,6 +126,19 @@ class ImageLabelingTool:
             self.clear_button.config(state=tk.NORMAL)
 
     def display_image(self):
+        """
+        Displays the current image in the image list on the canvas.
+
+        Clears any existing annotations, opens the image at the current index, resizes it to fit the canvas,
+        and creates a photo image to display on the canvas. The image is then displayed on the canvas,
+        and the window title is updated to show the image file name. The annotations list is also cleared.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         self.clear_annotations()
         image_path = self.image_list[self.image_index]
         self.image = Image.open(image_path)
@@ -100,16 +150,43 @@ class ImageLabelingTool:
 
 
     def on_button_press(self, event):
+        """
+        Handles the event when the left mouse button is pressed on the canvas.
+
+        Args:
+            event (Event): The event object containing information about the mouse press.
+
+        Returns:
+            None
+        """
         self.start_x = event.x
         self.start_y = event.y
         self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline='red')
 
     def on_mouse_drag(self, event):
+        """
+        Handles the event when the mouse is dragged on the canvas.
+
+        Args:
+            event (Event): The event object containing information about the mouse drag.
+
+        Returns:
+            None
+        """
         cur_x, cur_y = (event.x, event.y)
         if self.rect and self.start_x and self.start_y:
             self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
     def clear_annotations(self):
+        """
+        Clears all existing annotations from the canvas and updates the statistics plot.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         for rect in self.rectangles:
             self.canvas.delete(rect)
         self.rectangles.clear()
@@ -118,6 +195,15 @@ class ImageLabelingTool:
         self.update_statistics_plot()
 
     def on_button_release(self, event):
+        """
+        Handles the event when the left mouse button is released on the canvas.
+
+        Args:
+            event (Event): The event object containing information about the mouse release.
+
+        Returns:
+            None
+        """
         end_x, end_y = (event.x, event.y)
         label = simpledialog.askstring("Input", "Enter class label:")
         if label:
@@ -141,6 +227,17 @@ class ImageLabelingTool:
                 self.canvas.delete(self.rect)
 
     def next_image(self):
+        """
+        Proceeds to the next image in the image list, saving the current annotations and progress if necessary.
+        If there are no more images, displays an info message and disables the next button.
+        Otherwise, displays the next image.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         if self.annotations:
             self.save_annotations()
         self.save_progress()
@@ -152,6 +249,15 @@ class ImageLabelingTool:
             self.display_image()
 
     def save_annotations(self):
+        """
+        Saves the current image annotations to the annotations table and updates the statistics plot.
+        
+        Parameters:
+            None
+        
+        Returns:
+            None
+        """
         image_path = self.image_list[self.image_index]
 
         image_uuid = str(uuid.uuid4())
@@ -169,6 +275,19 @@ class ImageLabelingTool:
         print(f"Annotations saved for {new_image_name}")
 
     def load_progress(self):
+        """
+        Loads the progress of the image labeling tool from the progress table.
+
+        Retrieves the progress data from the progress table based on the current folder path.
+        If the progress data exists and is a dictionary, it updates the image index.
+        Otherwise, it resets the image index to 0.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         progress = self.progress_table.get(Query().folder == self.folder_path)
         if progress and type(progress) == dict:
             self.image_index = progress.get('image_index', 0)
@@ -176,6 +295,17 @@ class ImageLabelingTool:
             self.image_index = 0
 
     def save_progress(self):
+        """
+        Saves the progress of the image labeling tool to the progress table.
+
+        This function updates the progress table with the current folder path and image index. The progress table is used to store the progress of the image labeling tool for each folder. The function uses the `upsert` method of the `progress_table` object to insert or update the progress data based on the folder path.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         self.progress_table.upsert({
             'folder': self.folder_path,
             'image_index': self.image_index
@@ -184,12 +314,33 @@ class ImageLabelingTool:
         print(f"Progress saved for folder: {self.folder_path}, image index: {self.image_index}")
 
     def create_statistics_plot(self):
+        """
+        Creates a statistics plot for the image labeling tool.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         self.fig, self.ax = plt.subplots(figsize=(4, 3))
         self.ax.bar([], [])
         self.stats_canvas = FigureCanvasTkAgg(self.fig, master=self.stats_frame)
         self.stats_canvas.get_tk_widget().pack()
 
     def update_statistics_plot(self):
+        """
+        Updates the statistics plot for the image labeling tool.
+
+        Retrieves all annotations from the annotations table, calculates the class distribution,
+        and updates the plot with the new data.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         self.ax.clear()
         all_annotations = self.annotations_table.all()
         self.class_stats = {}
