@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from tinydb import TinyDB, Query
 import uuid
+import cv2
 
 class ImageLabelingTool:
     def __init__(self, root):
@@ -260,18 +261,29 @@ class ImageLabelingTool:
         """
         image_path = self.image_list[self.image_index]
 
+        # Load the original image to get its true size
+        original_img = cv2.imread(image_path)
+        original_height, original_width, _ = original_img.shape
+
+        # Generate a UUID for the image filename to prevent overwriting
         image_uuid = str(uuid.uuid4())
         image_extension = os.path.splitext(image_path)[1]
         new_image_name = f"{image_uuid}{image_extension}"
+
+        # Define the output path for the image
         image_output_path = os.path.join(self.output_folder, new_image_name)
+
+        # Copy the image to the output folder with the new name
         shutil.copy(image_path, image_output_path)
 
+        # Save annotations in TinyDB with original image size
         self.annotations_table.insert({
             'image_file': new_image_name,
+            'original_width': original_width,
+            'original_height': original_height,
             'annotations': self.annotations
         })
 
-        self.update_statistics_plot()
         print(f"Annotations saved for {new_image_name}")
 
     def load_progress(self):

@@ -3,3 +3,5 @@ output/*
 *.bmp
 
 annotations_db.json
+classes.txt
+yolo_annotations
